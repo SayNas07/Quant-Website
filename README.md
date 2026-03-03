@@ -1,3 +1,3 @@
 #Quant Website
-To run:\n
+To run:
 - streamlit run Simulation.py
