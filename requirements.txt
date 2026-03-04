@@ -7,3 +7,5 @@ random
 scipy
 requests
 seaborn
+textblob
+collections
