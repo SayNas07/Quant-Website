@@ -65,7 +65,7 @@ def fetch_stock_news(ticker, company_name=None, days_back=7):
     params = {
         "q": f"({query} OR {ticker}) AND (stock OR market OR earnings OR shares OR price)",
         "from": from_date,
-        "sortBy": "popularity",  # or "popularity" or "publishedAt"
+        "sortBy": "relevancy",  # or "popularity" or "publishedAt"
         "pageSize": 10,
         "language": "en",
         "apiKey": API_KEY
