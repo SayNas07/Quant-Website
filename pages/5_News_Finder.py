@@ -61,11 +61,11 @@ def fetch_stock_news(ticker, company_name=None, days_back=7):
     from_date = (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%d')
     
     # NewsAPI endpoint with parameters
-    url = "https://newsapi.org/v2/top-headlines"
+    url = "https://newsapi.org/v2/everything"
     params = {
         "q": f"({query} OR {ticker}) AND (stock OR market OR earnings OR shares OR price)",
         "from": from_date,
-        "sortBy": "relevancy",  # or "popularity" or "publishedAt"
+        "sortBy": "popularity",  # or "popularity" or "publishedAt"
         "pageSize": 10,
         "language": "en",
         "apiKey": API_KEY
