@@ -232,7 +232,7 @@ def render_news_page():
         flex-wrap: wrap;
     }
     .news-description {
-        color: #333;
+        color: darkgreen;
         margin-bottom: 1rem;
         line-height: 1.5;
     }
