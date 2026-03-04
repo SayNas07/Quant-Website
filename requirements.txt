@@ -3,9 +3,9 @@ pandas
 numpy
 matplotlib
 yfinance
-random
 scipy
 requests
 seaborn
+plotly
 textblob
 collections
