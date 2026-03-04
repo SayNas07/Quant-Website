@@ -7,5 +7,5 @@ scipy
 requests
 seaborn
 plotly
-textblob
 collections
+textblob
