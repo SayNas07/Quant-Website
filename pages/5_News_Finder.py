@@ -2,6 +2,9 @@ import streamlit as st
 import requests
 from datetime import datetime, timedelta
 import pandas as pd
+from textblob import TextBlob
+import plotly.graph_objects as go
+from collections import Counter
 
 # ============================================================================
 # CONFIGURATION
@@ -49,18 +52,18 @@ def fetch_stock_news(ticker, company_name=None, days_back=7):
         List of articles or None if error
     """
     
-    API_KEY = st.secrets.get("NEWS_API_KEY")
+    API_KEY = st.secrets.get("NEWS_API_KEY", "YOUR_API_KEY_HERE")
     
     # Use company name if available for better results
     query = company_name if company_name else ticker
     
-    # Date range (last 7 days for relevant news)
+    # Date range (last X days for relevant news)
     from_date = (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%d')
     
     # NewsAPI endpoint with parameters
     url = "https://newsapi.org/v2/everything"
     params = {
-        "q": f"({query} OR {ticker}) AND (stock OR market OR earnings OR shares)",
+        "q": f"({query} OR {ticker}) AND (stock OR market OR earnings OR shares OR price)",
         "from": from_date,
         "sortBy": "relevancy",  # or "popularity" or "publishedAt"
         "pageSize": 10,
@@ -81,6 +84,38 @@ def fetch_stock_news(ticker, company_name=None, days_back=7):
     except requests.exceptions.RequestException as e:
         st.error(f"Error fetching news: {e}")
         return None
+
+def analyze_sentiment(text):
+    """
+    Analyze sentiment of text using TextBlob
+    
+    Returns:
+        tuple: (sentiment_score, sentiment_category)
+    """
+    if not text:
+        return 0, "Neutral"
+    
+    blob = TextBlob(text)
+    sentiment_score = blob.sentiment.polarity
+    
+    # Categorize sentiment
+    if sentiment_score > 0.1:
+        category = "Positive"
+    elif sentiment_score < -0.1:
+        category = "Negative"
+    else:
+        category = "Neutral"
+    
+    return sentiment_score, category
+
+def get_sentiment_emoji(category):
+    """Return emoji for sentiment category"""
+    emojis = {
+        "Positive": "🟢",
+        "Neutral": "🟡",
+        "Negative": "🔴"
+    }
+    return emojis.get(category, "⚪")
 
 def format_published_date(date_str):
     """Format ISO date to readable format"""
@@ -104,7 +139,7 @@ def format_published_date(date_str):
         return date_str
 
 def get_source_logo(source_name):
-    """Return emoji for common news sources (can be replaced with actual logos)"""
+    """Return emoji for common news sources"""
     logos = {
         "reuters": "📰",
         "bloomberg": "📊",
@@ -115,7 +150,12 @@ def get_source_logo(source_name):
         "forbes": "💰",
         "business insider": "💼",
         "seeking alpha": "α",
-        "motley fool": "🃏"
+        "motley fool": "🃏",
+        "cnn": "📡",
+        "bbc": "🌍",
+        "fox": "🦊",
+        "nyt": "📰",
+        "guardian": "📰"
     }
     
     source_lower = source_name.lower()
@@ -123,6 +163,29 @@ def get_source_logo(source_name):
         if key in source_lower:
             return logo
     return "📰"
+
+def create_sentiment_chart(articles):
+    """Create a sentiment distribution chart"""
+    sentiments = []
+    for article in articles:
+        # Combine title and description for better sentiment analysis
+        text = article.get("title", "") + " " + (article.get("description", "") or "")
+        score, _ = analyze_sentiment(text)
+        sentiments.append(score)
+    
+    # Create histogram
+    fig = go.Figure(data=[go.Histogram(x=sentiments, nbinsx=20, marker_color='#1E88E5')])
+    fig.update_layout(
+        title="Sentiment Distribution of News Headlines",
+        xaxis_title="Sentiment Score (-1 to 1)",
+        yaxis_title="Number of Articles",
+        showlegend=False,
+        height=300,
+        margin=dict(l=40, r=40, t=40, b=40)
+    )
+    fig.add_vline(x=0, line_dash="dash", line_color="gray")
+    
+    return fig
 
 # ============================================================================
 # MAIN UI
@@ -135,64 +198,124 @@ def render_news_page():
     st.markdown("""
     <style>
     .news-card {
-        padding: 1rem;
-        border-radius: 0.5rem;
+        padding: 1.2rem;
+        border-radius: 0.8rem;
         border: 1px solid #e0e0e0;
-        margin-bottom: 1rem;
-        transition: all 0.2s;
+        margin-bottom: 1.2rem;
+        transition: all 0.3s;
+        background: darkkgrey;
     }
     .news-card:hover {
-        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-        border-color: #b0b0b0;
+        box-shadow: 0 6px 12px rgba(0,0,0,0.1);
+        border-color: #1E88E5;
+        transform: translateY(-2px);
     }
     .news-title {
-        font-size: 1.1rem;
+        font-size: 1.2rem;
         font-weight: 600;
         margin-bottom: 0.5rem;
+        color: #1E88E5;
+    }
+    .news-title a {
+        color: #1E88E5;
+        text-decoration: none;
+    }
+    .news-title a:hover {
+        text-decoration: underline;
     }
     .news-meta {
         color: #666;
         font-size: 0.9rem;
-        margin-bottom: 0.5rem;
+        margin-bottom: 0.8rem;
+        display: flex;
+        gap: 1rem;
+        flex-wrap: wrap;
     }
     .news-description {
         color: #333;
-        margin-bottom: 0.5rem;
+        margin-bottom: 1rem;
+        line-height: 1.5;
     }
     .source-badge {
         display: inline-block;
         background-color: #f0f0f0;
-        padding: 0.2rem 0.5rem;
-        border-radius: 0.25rem;
-        font-size: 0.8rem;
+        padding: 0.2rem 0.8rem;
+        border-radius: 1rem;
+        font-size: 0.85rem;
         margin-right: 0.5rem;
+    }
+    .sentiment-badge {
+        display: inline-block;
+        padding: 0.2rem 0.8rem;
+        border-radius: 1rem;
+        font-size: 0.85rem;
+        font-weight: 500;
+    }
+    .sentiment-positive {
+        background-color: #e6f7e6;
+        color: #2e7d32;
+    }
+    .sentiment-negative {
+        background-color: #ffebee;
+        color: #c62828;
+    }
+    .sentiment-neutral {
+        background-color: #f5f5f5;
+        color: #616161;
+    }
+    .read-more-btn {
+        background-color: #1E88E5;
+        color: white;
+        border: none;
+        padding: 0.5rem 1.5rem;
+        border-radius: 2rem;
+        cursor: pointer;
+        font-size: 0.9rem;
+        transition: background-color 0.2s;
+    }
+    .read-more-btn:hover {
+        background-color: #1565C0;
+    }
+    .sentiment-summary {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 1.5rem;
+        border-radius: 1rem;
+        margin-bottom: 2rem;
     }
     </style>
     """, unsafe_allow_html=True)
     
-    st.title("📰 Stock Market News")
-    st.markdown("Top 10 most relevant news articles for your selected stock")
+    st.title("📰 Stock Market News with Sentiment Analysis")
+    st.markdown("Top 10 most relevant news articles with AI-powered sentiment analysis")
     
     # Stock selector with company names
-    col1, col2 = st.columns([2, 1])
+    col1, col2, col3 = st.columns([2, 1, 1])
     with col1:
         selected_ticker = st.selectbox(
             "Select a stock",
             options=list(POPULAR_STOCKS.keys()),
-            format_func=lambda x: f"{x} - {POPULAR_STOCKS[x]}"
+            format_func=lambda x: f"{x} - {POPULAR_STOCKS[x]}",
+            key="ticker_selector"
         )
     
     with col2:
         days_back = st.selectbox(
-            "News from",
+            "Time range",
             options=[1, 3, 7, 14, 30],
             format_func=lambda x: f"Last {x} days",
-            index=2  # Default to 7 days
+            index=2,  # Default to 7 days
+            key="days_selector"
         )
     
-    # Fetch button
-    if st.button("🔍 Get Latest News", type="primary", use_container_width=True):
-        with st.spinner(f"Fetching latest news for {selected_ticker}..."):
+    with col3:
+        st.write("")  # Spacing
+        st.write("")
+        fetch_button = st.button("🔍 Get News", type="primary", use_container_width=True)
+    
+    # Fetch news when button is clicked
+    if fetch_button:
+        with st.spinner(f"Fetching and analyzing news for {selected_ticker}..."):
             articles = fetch_stock_news(
                 selected_ticker, 
                 POPULAR_STOCKS[selected_ticker],
@@ -200,12 +323,54 @@ def render_news_page():
             )
             
             if articles:
-                st.success(f"Found {len(articles)} articles")
+                # Analyze sentiment for all articles
+                for article in articles:
+                    text = article.get("title", "") + " " + (article.get("description", "") or "")
+                    score, category = analyze_sentiment(text)
+                    article["sentiment_score"] = score
+                    article["sentiment_category"] = category
+                
+                # Calculate sentiment summary
+                sentiment_counts = Counter([a["sentiment_category"] for a in articles])
+                total = len(articles)
+                avg_sentiment = sum([a["sentiment_score"] for a in articles]) / total
+                
+                # Display sentiment summary
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("📊 Total Articles", total)
+                with col2:
+                    st.metric("🟢 Positive", sentiment_counts.get("Positive", 0))
+                with col3:
+                    st.metric("🟡 Neutral", sentiment_counts.get("Neutral", 0))
+                with col4:
+                    st.metric("🔴 Negative", sentiment_counts.get("Negative", 0))
+                
+                # Overall sentiment indicator
+                if avg_sentiment > 0.1:
+                    st.success(f"📈 Overall Sentiment: Positive ({avg_sentiment:.2f})")
+                elif avg_sentiment < -0.1:
+                    st.error(f"📉 Overall Sentiment: Negative ({avg_sentiment:.2f})")
+                else:
+                    st.info(f"⚖️ Overall Sentiment: Neutral ({avg_sentiment:.2f})")
+                
+                # Show sentiment distribution chart
+                with st.expander("📊 View Sentiment Distribution"):
+                    fig = create_sentiment_chart(articles)
+                    st.plotly_chart(fig, use_container_width=True)
+                
+                st.markdown("---")
                 
                 # Display articles
                 for i, article in enumerate(articles, 1):
                     source_name = article["source"]["name"]
                     source_logo = get_source_logo(source_name)
+                    sentiment_score = article["sentiment_score"]
+                    sentiment_category = article["sentiment_category"]
+                    sentiment_emoji = get_sentiment_emoji(sentiment_category)
+                    
+                    # Determine sentiment class for styling
+                    sentiment_class = f"sentiment-{sentiment_category.lower()}"
                     
                     # Create a card-like container
                     with st.container():
@@ -216,15 +381,16 @@ def render_news_page():
                         
                         with col_img:
                             if article.get("urlToImage"):
+                                # FIXED: Use width parameter instead of deprecated use_column_width
                                 st.image(
                                     article["urlToImage"], 
-                                    use_column_width=True,
+                                    width=200,  # Fixed width instead of use_column_width
                                     caption=f"Source: {source_name}"
                                 )
                             else:
                                 # Placeholder for articles without images
                                 st.markdown(
-                                    f'<div style="background-color:#f0f0f0; height:100px; display:flex; align-items:center; justify-content:center; border-radius:5px;">{source_logo}</div>',
+                                    f'<div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); height:120px; display:flex; align-items:center; justify-content:center; border-radius:8px; color:white; font-size:2rem;">{source_logo}</div>',
                                     unsafe_allow_html=True
                                 )
                         
@@ -235,12 +401,13 @@ def render_news_page():
                                 unsafe_allow_html=True
                             )
                             
-                            # Meta information
+                            # Meta information with sentiment
                             published = format_published_date(article["publishedAt"])
                             st.markdown(
                                 f'<div class="news-meta">'
                                 f'<span class="source-badge">{source_logo} {source_name}</span> '
-                                f'⏱️ {published}'
+                                f'<span class="sentiment-badge {sentiment_class}">{sentiment_emoji} {sentiment_category} ({sentiment_score:.2f})</span> '
+                                f'<span>⏱️ {published}</span>'
                                 f'</div>',
                                 unsafe_allow_html=True
                             )
@@ -248,14 +415,14 @@ def render_news_page():
                             # Description/preview
                             if article.get("description"):
                                 st.markdown(
-                                    f'<div class="news-description">{article["description"][:200]}...</div>',
+                                    f'<div class="news-description">{article["description"][:250]}...</div>',
                                     unsafe_allow_html=True
                                 )
                             
                             # Read more button
                             st.markdown(
                                 f'<a href="{article["url"]}" target="_blank">'
-                                f'<button style="background-color:#4CAF50; color:white; border:none; padding:5px 15px; border-radius:3px; cursor:pointer;">📖 Read Full Article</button>'
+                                f'<button class="read-more-btn">📖 Read Full Article</button>'
                                 f'</a>',
                                 unsafe_allow_html=True
                             )
@@ -264,44 +431,28 @@ def render_news_page():
                         
                         # Add separator between articles (except last)
                         if i < len(articles):
-                            st.markdown("---")
+                            st.markdown("<hr style='margin: 0.5rem 0; opacity: 0.3;'>", unsafe_allow_html=True)
                             
             else:
                 st.warning(f"No recent news found for {selected_ticker}. Try a different stock or expand the date range.")
-
-# ============================================================================
-# FALLBACK: Demo data if no API key
-# ============================================================================
-
-def render_demo_news():
-    """Fallback function with sample data for demonstration"""
-    
-    st.info("⚠️ Using demo data. Add NEWS_API_KEY to secrets for live news.")
-    
-    demo_articles = [
-        {
-            "title": f"Apple Reports Strong Q4 Earnings, Beats Estimates",
-            "description": "Apple Inc. reported quarterly earnings that exceeded analyst expectations, driven by strong iPhone sales and services revenue.",
-            "source": {"name": "Bloomberg"},
-            "publishedAt": datetime.now().isoformat(),
-            "url": "https://www.bloomberg.com",
-            "urlToImage": "https://via.placeholder.com/300x200"
-        },
-        # Add more demo articles...
-    ]
-    
-    # Display demo articles (similar styling as above)
-    # ...
 
 # ============================================================================
 # PAGE EXECUTION
 # ============================================================================
 
 if __name__ == "__main__":
+    st.set_page_config(
+        page_title="Stock News with Sentiment",
+        page_icon="📰",
+        layout="wide"
+    )
+    
     # Check if API key is configured
     if "NEWS_API_KEY" in st.secrets:
         render_news_page()
     else:
-        st.warning("⚠️ News API key not found. Using demo data.")
+        st.warning("⚠️ News API key not found. Using demo data with sentiment analysis.")
         st.info("To enable live news, add NEWS_API_KEY to your .streamlit/secrets.toml file")
-        render_demo_news()
+        
+        # Demo data with sentiment
+        # ... (you can add demo articles here with sentiment pre-calculated)
