@@ -21,7 +21,7 @@ sp100_tickers = [
     "GILD", "AMAT", "LMT", "ISRG", "DE", "BKNG", "SYK", "TJX", "PLD", "C",
     "ADP", "NOW", "MO", "MDLZ", "AXP", "VRTX", "ZTS", "SCHW", "TGT", "CVS",
     "ELV", "MMC", "CI", "BDX", "REGN", "FIS", "PNC", "CSCO", "SO", "DUK",
-    "SHW", "CL", "ICE", "AON", "ETN", "USB", "WM", "ITW", "HCA", "SLB"
+    "SHW", "CL", "ICE", "AON", "ETN", "USB", "WM", "ITW", "HCA", "SLB","TILE","NSC"
 ]
 default = ["AAPL", "MSFT"]
 tickers = col2.multiselect("Tickers (Company Stocks)", options = sp100_tickers, max_selections = 25,default = default)
